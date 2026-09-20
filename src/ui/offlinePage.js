@@ -7,7 +7,7 @@ export function createOfflinePage() {
 <html lang="zh-CN">
 <head>
   ${getStandaloneHead(
-		'离线模式 - 2FA',
+		'离线模式',
 		`
     .offline-page { text-align: center; }
     .offline-page .page-icon { justify-content: center; color: var(--page-warning); }

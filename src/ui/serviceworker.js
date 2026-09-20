@@ -17,7 +17,7 @@ export function createServiceWorker(env = {}) {
 	// 2. env.BUILD_TIMESTAMP - 构建时间戳
 	// 3. __BUILD_SW_VERSION__ - 单文件 release 构建时内嵌的版本号
 	// 4. 'v1' - 默认版本（后备）
-	const version = env.SW_VERSION || env.BUILD_TIMESTAMP || embeddedBuildVersion || 'v1';
+	const version = (env.SW_VERSION || env.BUILD_TIMESTAMP || embeddedBuildVersion || 'v1') + '-password-entry-v1';
 
 	// 生成缓存名称
 	const CACHE_NAME = `2fa-cache-${version}`;
@@ -290,6 +290,21 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Never cache credentials or queue login/logout requests in IndexedDB.
+  if (url.origin === self.location.origin && ['/api/login', '/api/logout', '/api/setup', '/api/refresh-token'].includes(url.pathname)) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // A cached document is not proof of a valid session. Always revalidate the vault.
+  if (url.origin === self.location.origin && (url.pathname === '/admin' || url.pathname === '/admin/')) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store', redirect: 'follow' })
+        .catch(() => Response.redirect(new URL('/', self.location.origin).href, 302))
+    );
+    return;
+  }
+
   // Favicon 代理请求：缓存优先策略（在 API 请求之前处理）
   if (url.pathname.startsWith('/api/favicon/')) {
     event.respondWith(
@@ -453,8 +468,8 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(request, { redirect: 'follow' })
         .then(response => {
-          // 网络请求成功，更新缓存
-          if (response && response.status === 200) {
+          // Only cache the public generator, never an old vault document.
+          if (response && response.status === 200 && response.headers.get('X-Public-Page') === 'password-generator-v1') {
             console.log('[SW] 从网络获取并更新缓存:', url.pathname);
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then(cache => {
@@ -467,7 +482,7 @@ self.addEventListener('fetch', event => {
           // 网络请求失败（离线），尝试使用缓存
           console.log('[SW] 网络请求失败，使用缓存:', url.pathname, err.message);
           return caches.match(request).then(cachedResponse => {
-            if (cachedResponse) {
+            if (cachedResponse && cachedResponse.headers.get('X-Public-Page') === 'password-generator-v1') {
               console.log('[SW] 从缓存返回（离线模式）:', url.pathname);
               return cachedResponse;
             }

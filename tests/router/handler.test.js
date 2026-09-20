@@ -252,17 +252,13 @@ describe('Router Handler', () => {
       expect(response.status).toBe(200);
     });
 
-    it('应该在需要设置时重定向根路径到 /setup', async () => {
-      const { checkIfSetupRequired } = await import('../../src/utils/auth.js');
-      checkIfSetupRequired.mockResolvedValueOnce(true);
-
-      const request = createMockRequest({ pathname: '/' });
-      const env = createMockEnv();
-
-      const response = await handleRequest(request, env);
-
-      expect(response.status).toBe(302);
-      expect(response.headers.get('Location')).toContain('/setup');
+    it('首页始终显示生成器，不自动暴露首次设置页面', async () => {
+      const { checkIfSetupRequired, verifyAuthWithDetails } = await import('../../src/utils/auth.js');
+      const response = await handleRequest(createMockRequest({ pathname: '/' }), {});
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('在线密码生成器');
+      expect(checkIfSetupRequired).not.toHaveBeenCalled();
+      expect(verifyAuthWithDetails).not.toHaveBeenCalled();
     });
   });
 
@@ -331,9 +327,6 @@ describe('Router Handler', () => {
     });
 
     it('公开路由应该不需要认证', async () => {
-      const { requiresAuth } = await import('../../src/utils/auth.js');
-      requiresAuth.mockReturnValueOnce(false);
-
       const request = createMockRequest({ pathname: '/' });
       const env = createMockEnv();
 
@@ -344,8 +337,8 @@ describe('Router Handler', () => {
   });
 
   describe('handleRequest - 静态资源路由', () => {
-    it('应该渲染主页面', async () => {
-      const request = createMockRequest({ pathname: '/' });
+    it('应该在认证后渲染后台页面', async () => {
+      const request = createMockRequest({ pathname: '/admin' });
       const env = createMockEnv();
 
       const response = await handleRequest(request, env);
@@ -1034,7 +1027,7 @@ describe('Router Handler', () => {
       const { createMainPage } = await import('../../src/ui/page.js');
       createMainPage.mockRejectedValueOnce(new Error('Test error'));
 
-      const request = createMockRequest({ pathname: '/' });
+      const request = createMockRequest({ pathname: '/admin' });
       const env = createMockEnv();
 
       const response = await handleRequest(request, env);
@@ -1059,7 +1052,7 @@ describe('Router Handler', () => {
 
       createMainPage.mockRejectedValueOnce(new Error('Test error'));
 
-      const request = createMockRequest({ pathname: '/' });
+      const request = createMockRequest({ pathname: '/admin' });
       const env = createMockEnv();
 
       await handleRequest(request, env);

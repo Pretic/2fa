@@ -257,7 +257,7 @@ export async function createSetupPage() {
 
           // 2秒后跳转到主页
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/admin';
           }, 2000);
         } else {
           showError(data.message || '设置失败，请重试');

@@ -944,7 +944,7 @@ export async function handleLogout(request, env) {
 export function requiresAuth(pathname) {
 	// 不需要认证的路径
 	const publicPaths = [
-		'/', // 主页（会显示登录界面）
+		'/', // 公开密码生成器；后台 /admin 仍需服务端认证
 		'/api/login', // 登录接口
 		'/api/logout', // 退出登录接口
 		'/api/refresh-token', // Token 刷新接口（已在内部验证）

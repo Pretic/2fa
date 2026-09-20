@@ -4,7 +4,7 @@ import { createServiceWorker } from '../../src/ui/serviceworker.js';
 
 async function navigateOffline(cachedResponse) {
 	const listeners = new Map();
-	const self = { addEventListener: (type, callback) => listeners.set(type, callback) };
+	const self = { location: { origin: 'https://2fa.example.com' }, addEventListener: (type, callback) => listeners.set(type, callback) };
 	const fetch = vi.fn().mockRejectedValue(new TypeError('Network unavailable'));
 	const caches = { match: vi.fn().mockResolvedValue(cachedResponse) };
 	const quietConsole = { log: vi.fn(), error: vi.fn(), warn: vi.fn() };
@@ -39,11 +39,19 @@ describe('Service Worker offline navigation', () => {
 		expect(() => new Function(scripts[0][1])).not.toThrow();
 	});
 
-	it('serves the cached app before falling back to the offline document', async () => {
-		const cachedResponse = new Response('<!DOCTYPE html><title>Cached app</title>');
+	it('serves only the cached public generator before falling back to the offline document', async () => {
+		const cachedResponse = new Response('<!DOCTYPE html><title>Cached generator</title>', {
+			headers: { 'X-Public-Page': 'password-generator-v1' },
+		});
 		const response = await navigateOffline(cachedResponse);
 
 		expect(response).toBe(cachedResponse);
 		expect(response.status).toBe(200);
 	});
+});
+
+it('rejects an old cached vault document', async () => {
+	const response = await navigateOffline(new Response('<html>Old private vault</html>'));
+	expect(response.status).toBe(503);
+	expect(await response.text()).not.toContain('Old private vault');
 });

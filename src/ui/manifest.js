@@ -56,13 +56,13 @@ export function createManifest(request) {
 				name: '添加密钥',
 				short_name: '添加',
 				description: '快速添加新的 2FA 密钥',
-				url: '/?action=add',
+				url: '/admin?action=add',
 			},
 			{
 				name: '扫描二维码',
 				short_name: '扫描',
 				description: '扫描二维码添加密钥',
-				url: '/?action=scan',
+				url: '/admin?action=scan',
 			},
 		],
 
@@ -76,7 +76,7 @@ export function createManifest(request) {
 		protocol_handlers: [
 			{
 				protocol: 'web+otpauth',
-				url: '/?otpauth=%s',
+				url: '/admin?otpauth=%s',
 			},
 		],
 	};

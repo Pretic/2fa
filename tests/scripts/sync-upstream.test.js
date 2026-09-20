@@ -21,7 +21,10 @@ const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 const fixtureRoot = join(projectRoot, 'tests/fixtures/sync-upstream');
 // Frozen before the fix: execute the real legacy commit step, including its pre-stage diff check.
 const legacyWorkflow = readFileSync(join(fixtureRoot, 'legacy-workflow.yml'), 'utf8').replace(/\r\n/g, '\n');
-const currentWorkflow = readFileSync(join(projectRoot, '.github/workflows/sync-upstream.yml'), 'utf8').replace(/\r\n/g, '\n');
+// Standalone imports may intentionally omit the upstream-sync workflow.
+const workflowPath = join(projectRoot, '.github/workflows/sync-upstream.yml');
+const hasSyncWorkflow = existsSync(workflowPath);
+const currentWorkflow = hasSyncWorkflow ? readFileSync(workflowPath, 'utf8').replace(/\r\n/g, '\n') : '';
 const sandboxes = [];
 const rsyncCommand = process.platform === 'win32' ? 'wsl' : 'rsync';
 const rsyncPrefix = process.platform === 'win32' ? ['--exec', 'rsync'] : [];
@@ -273,7 +276,7 @@ afterEach(() => {
 	}
 });
 
-describe('Sync Upstream compatibility using real Git repositories', () => {
+describe.skipIf(!hasSyncWorkflow)('Sync Upstream compatibility using real Git repositories', () => {
 	it.skipIf(!hasRsync).each([
 		['legacy workflow with compatibility repair', legacyWorkflow, true],
 		['current workflow without compatibility repair', currentWorkflow, false],

@@ -255,10 +255,8 @@ export function getAuthCode() {
         secretsList.style.display = 'none';
       }
 
-      showCenterToast('⚠️', '登录已过期，请重新登录');
-      setTimeout(() => {
-        showLoginModal();
-      }, 1500);
+      // Expired sessions return to the public document, not an exposed vault shell.
+      window.location.replace('/');
     }
 
     // 退出登录
@@ -327,6 +325,13 @@ export function getAuthCode() {
         hideSettingsModal();
       }
 
+      // Always return to the public page. A failed server logout must not be
+      // presented as a revoked session; remove the cached vault and warn first.
+      if (serverSuccess) {
+        window.location.replace('/');
+        return true;
+      }
+
       // 3. 反馈给用户
       if (serverSuccess) {
         showCenterToast('👋', '已退出登录');
@@ -335,14 +340,17 @@ export function getAuthCode() {
       }
 
       setTimeout(() => {
-        showLoginModal();
-      }, 500);
+        window.location.replace('/');
+      }, 1500);
 
       return serverSuccess;
     }
 
     if (typeof window !== 'undefined') {
       window.logout = logout;
+      window.addEventListener('pageshow', event => {
+        if (event.persisted) { window.location.reload(); }
+      });
     }
 
     // 为 fetch 请求添加认证（使用 Cookie）并支持自动续期

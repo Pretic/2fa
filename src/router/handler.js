@@ -50,6 +50,7 @@ import { handleGetTime } from '../api/time.js';
 
 // UI 页面生成器
 import { createMainPage } from '../ui/page.js';
+import { createPasswordPage } from '../ui/passwordPage.js';
 import { createSetupPage } from '../ui/setupPage.js';
 import { createManifest, createDefaultIcon } from '../ui/manifest.js';
 import { createServiceWorker } from '../ui/serviceworker.js';
@@ -84,6 +85,15 @@ export async function handleRequest(request, env, ctx) {
 	const logger = getLogger(env);
 
 	try {
+		// Public landing is independent of KV, session state and vault modules.
+		if (pathname === '/' || pathname === '') {
+			if (method !== 'GET' && method !== 'HEAD') {
+				return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
+			}
+			const response = createPasswordPage();
+			return method === 'HEAD' ? new Response(null, response) : response;
+		}
+
 		// 时间校准接口必须在设置和认证检查前处理，确保无需访问 KV。
 		if (pathname === '/api/time') {
 			if (method === 'GET') {
@@ -110,19 +120,20 @@ export async function handleRequest(request, env, ctx) {
 			return await handleFirstTimeSetup(request, env);
 		}
 
-		// 检查是否需要首次设置
-		const setupRequired = await checkIfSetupRequired(env);
-		if (setupRequired && pathname === '/') {
-			// 需要首次设置，重定向到设置页面
-			return Response.redirect(new URL('/setup', request.url).toString(), 302);
-		}
-
 		// 🔐 检查是否需要身份验证（使用详细验证以支持自动续期）
 		let authDetails = null;
 		if (requiresAuth(pathname)) {
 			authDetails = await verifyAuthWithDetails(request, env);
 
 			if (!authDetails || !authDetails.valid) {
+				if (pathname === '/admin' || pathname === '/admin/') {
+					const action = url.searchParams.get('action');
+					const target = ['add', 'scan'].includes(action) ? '/?action=' + action : '/';
+					return new Response(null, {
+						status: 302,
+						headers: { Location: target, 'Cache-Control': 'no-store' },
+					});
+				}
 				// 检查是否未配置 KV 存储
 				if (!env.SECRETS_KV) {
 					return createErrorResponse('服务未配置', '服务器未配置 KV 存储。请联系管理员配置 SECRETS_KV。', 503, request);
@@ -141,9 +152,13 @@ export async function handleRequest(request, env, ctx) {
 			request.authDetails = authDetails;
 		}
 
-		// 静态路由处理
-		if (pathname === '/' || pathname === '') {
-			return await createMainPage();
+		// The actual vault document is only generated after server-side authentication.
+		if (pathname === '/admin' || pathname === '/admin/') {
+			if (method !== 'GET' && method !== 'HEAD') {
+				return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
+			}
+			const response = await createMainPage();
+			return method === 'HEAD' ? new Response(null, response) : response;
 		}
 
 		// PWA Manifest

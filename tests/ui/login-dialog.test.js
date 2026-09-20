@@ -47,7 +47,7 @@ async function createLoginHarness() {
 	const loadSecrets = vi.fn();
 	const context = createContext({
 		document: { getElementById: (id) => elements.get(id) || null },
-		window: { isSecureContext: true },
+		window: { isSecureContext: true, addEventListener: vi.fn() },
 		console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
 		requestAnimationFrame: (callback) => callback(),
 		setTimeout,
