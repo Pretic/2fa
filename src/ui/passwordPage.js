@@ -22,7 +22,7 @@ export function createPasswordPage() {
 <h1 class="sr-only">在线密码生成器</h1><main class="generator stack">
 <div><label id="output-label" for="password-output" class="output-label">生成的新密码</label>
 <input id="password-output" class="output" type="text" readonly autocomplete="off" spellcheck="false" aria-label="生成的密码">
-<div class="actions"><button id="copy-password" type="button" class="btn primary" disabled>${copyIcon}<span id="copy-text">复制密码</span></button><button id="generate-password" type="button" class="btn">${refreshIcon}<span>生成新密码</span></button></div>
+<div class="actions"><button id="generate-password" type="button" class="btn">${refreshIcon}<span>生成新密码</span></button><button id="copy-password" type="button" class="btn primary" disabled>${copyIcon}<span id="copy-text">复制密码</span></button></div>
 <div id="copy-status" class="sr-only" role="status" aria-live="polite"></div><p id="generator-error" class="error" role="alert" hidden></p></div>
 <div class="section stack">
 <div><span class="section-label">模式</span><div class="tabs" role="group" aria-label="生成模式"><button id="password-mode" type="button" aria-pressed="true">普通密码</button><button id="passphrase-mode" type="button" aria-pressed="false">密码短语（词组）</button></div><p id="mode-hint" class="hint">根据自定义字符类型生成高强度随机密码</p></div>

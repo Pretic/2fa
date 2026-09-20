@@ -25,7 +25,7 @@
 
 沿用原仓库部署方式发布此版本。连接 Git 自动部署的 Worker 需确认部署成功；手动部署则重新构建并发布。若已经打开旧页面，部署后重新加载；旧 PWA 用户可能还需关闭旧标签页后重新进入，以完成 Service Worker 更新。
 
-本次不修改 `wrangler.toml`、生产环境变量、KV 数据或原有密码。词库许可保留在 `THIRD_PARTY_NOTICES.md` 和源码中，不在页面底部添加链接。
+Wrangler 配置中的 `keep_names = false` 必须保留：生成器将独立函数序列化为浏览器脚本，默认的函数名保留转换会注入只存在于 Worker 中的 `__name` 辅助函数，导致生成及登录按钮失效。该设置兼容现有 Git 自动部署，无需新增发布流程，也不改变 Worker 名称、KV 绑定、生产环境变量或原有密码。词库许可保留在源码中，不在页面底部添加链接。
 
 ## 验证
 
@@ -34,6 +34,9 @@ npm ci
 npm run build
 node scripts/build-release.js --minify --output=dist/worker.min.js
 npx vitest run tests/ui/password-generator.test.js tests/ui/password-entry.test.js tests/router/handler.test.js tests/ui/serviceworker-offline.test.js tests/ui/login-dialog.test.js tests/scripts/build-release-code.test.js
+npx vitest run tests/ui/password-bundle.test.js
 ```
 
 测试使用合成密码和内存 KV，不读取生产密钥。包含生成边界、批量字符排除、短语排除、错误规则、真实认证处理函数、后台访问控制、登录/退出、HEAD 方法和离线缓存边界。
+
+打包回归测试通过 Wrangler dry-run 生成普通及压缩产物，再执行实际页面内嵌脚本，检查首次生成、重新生成、复制及登录窗口，防止仅测试源码时漏掉打包错误。
