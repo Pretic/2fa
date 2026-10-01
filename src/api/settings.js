@@ -6,7 +6,14 @@ import { createJsonResponse, createErrorResponse } from '../utils/response.js';
 import { getLogger } from '../utils/logger.js';
 import { checkRateLimit, getClientIdentifier, createRateLimitResponse, RATE_LIMIT_PRESETS } from '../utils/rateLimit.js';
 import { ValidationError, errorToResponse, logError } from '../utils/errors.js';
-import { DEFAULT_SETTINGS, getSettings, KV_SETTINGS_KEY, sanitizeDefaultExportFormat, VALID_EXPORT_FORMATS } from '../utils/settings.js';
+import {
+	getSettings,
+	KV_SETTINGS_KEY,
+	sanitizeDefaultExportFormat,
+	sanitizeLanguage,
+	VALID_EXPORT_FORMATS,
+	VALID_LANGUAGES,
+} from '../utils/settings.js';
 
 const SETTINGS_VALIDATORS = {
 	jwtExpiryDays: (value) => {
@@ -46,6 +53,18 @@ const SETTINGS_VALIDATORS = {
 
 		return null;
 	},
+	language: (value) => {
+		if (typeof value !== 'string') {
+			return '语言偏好必须是字符串';
+		}
+
+		const normalized = value.trim();
+		if (!VALID_LANGUAGES.includes(normalized)) {
+			return `语言偏好仅支持：${VALID_LANGUAGES.join(', ')}`;
+		}
+
+		return null;
+	},
 };
 
 function createSettingsFallbackHandler(logger, message) {
@@ -65,6 +84,7 @@ export async function handleGetSettings(request, env) {
 	try {
 		const settings = await getSettings(env, {
 			onInvalid: createSettingsFallbackHandler(logger, '设置数据已损坏，已回退默认配置'),
+			omitUnsetLanguage: true,
 		});
 		return createJsonResponse(settings, 200, request);
 	} catch (error) {
@@ -95,6 +115,7 @@ export async function handleSaveSettings(request, env) {
 		const body = await request.json();
 		const current = await getSettings(env, {
 			onInvalid: createSettingsFallbackHandler(logger, '设置数据已损坏，保存时将使用默认配置覆盖'),
+			omitUnsetLanguage: true,
 		});
 
 		const updated = { ...current };
@@ -110,6 +131,8 @@ export async function handleSaveSettings(request, env) {
 
 			if (key === 'defaultExportFormat') {
 				updated[key] = sanitizeDefaultExportFormat(value);
+			} else if (key === 'language') {
+				updated[key] = sanitizeLanguage(value);
 			} else {
 				updated[key] = Number(value);
 			}
@@ -123,7 +146,7 @@ export async function handleSaveSettings(request, env) {
 			{
 				success: true,
 				message: '设置已保存',
-				settings: { ...DEFAULT_SETTINGS, ...updated },
+				settings: updated,
 			},
 			200,
 			request,

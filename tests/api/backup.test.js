@@ -4,7 +4,10 @@
  * 目标覆盖率: 70%+
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+afterEach(() => vi.restoreAllMocks());
+
+import * as webdav from '../../src/utils/webdav.js';
 import worker from '../../src/worker.js';
 import {
   handleBackupSecrets,
@@ -436,6 +439,7 @@ describe('Backup API Module', () => {
     });
 
     it('应该通过 ctx.waitUntil 托管 WebDAV 推送', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 201 }));
       const env = createMockEnv();
 
       await saveSecretsToKV(env, [
@@ -459,9 +463,12 @@ describe('Backup API Module', () => {
       expect(ctx.waitUntil).toHaveBeenCalledTimes(4); // WebDAV + S3 + OneDrive + Google Drive 推送
       // waitUntil 接收的应该是一个 Promise
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('没有 ctx 时 WebDAV 推送不应报错', async () => {
+      const push = vi.spyOn(webdav, 'pushToWebDAV');
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 201 }));
       const env = createMockEnv();
 
       await saveSecretsToKV(env, [
@@ -476,8 +483,9 @@ describe('Backup API Module', () => {
       }));
 
       const request = createMockRequest();
-      // 不传 ctx，验证不会抛异常
+      // 不传 ctx，验证不会抛异常；等待后台任务完成后再还原网络 mock。
       const response = await handleBackupSecrets(request, env);
+      await Promise.all(push.mock.results.map(({ value }) => value));
       const data = await response.json();
 
       expect(data.success).toBe(true);
@@ -928,6 +936,7 @@ describe('Backup API Module', () => {
       expect(firstPageData.pagination.cursor).toBe('backup_2026-04-16_00-00-00-000-c.json');
       expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('reads later pages from backup indexes when a current index already exists', async () => {
@@ -1137,6 +1146,7 @@ describe('Backup API Module', () => {
       expect(env.SECRETS_KV.list.mock.calls.some(([options]) => options && options.prefix === 'backup_')).toBe(true);
       expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('does not fall back from an opaque indexed cursor when the later page is complete for the remaining count', async () => {
@@ -1581,6 +1591,7 @@ describe('Backup API Module', () => {
       expect(listSpy.mock.calls.some(([options]) => options && options.prefix === 'backup_')).toBe(true);
       expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('falls back to scanning real backup keys when indexed entries point to deleted backups', async () => {
@@ -1669,6 +1680,7 @@ describe('Backup API Module', () => {
       expect(data.backups.some((backup) => backup.key === staleBackupKey)).toBe(false);
       expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('falls back to real backup keys when a stale indexed entry appears beyond the first three results', async () => {
@@ -1768,6 +1780,7 @@ describe('Backup API Module', () => {
       expect(listSpy.mock.calls.some(([options]) => options && options.prefix === 'backup_')).toBe(true);
       expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('falls back to scanning backup keys when only part of the current index exists', async () => {
@@ -1839,6 +1852,7 @@ describe('Backup API Module', () => {
       expect(listSpy.mock.calls.some(([options]) => options && options.prefix === 'backup_')).toBe(true);
       expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
       expect(ctx.waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+      await Promise.all(ctx.waitUntil.mock.calls.map(([pending]) => pending));
     });
 
     it('deduplicates concurrent backup index rebuilds', async () => {
