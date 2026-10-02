@@ -224,6 +224,7 @@ function createSandbox({ legacy = false, remote = false, workflows = true } = {}
 	write(context.repo, 'obsolete.txt', 'old file to remove\n');
 	write(context.repo, 'scripts/merge-wrangler-config.js', readFileSync(join(projectRoot, 'scripts/merge-wrangler-config.js')));
 	write(context.repo, 'scripts/sync-upstream-compat.js', readFileSync(join(projectRoot, 'scripts/sync-upstream-compat.js')));
+	write(context.repo, 'scripts/merge-migrations.js', readFileSync(join(projectRoot, 'scripts/merge-migrations.js')));
 	if (workflows) {
 		write(context.repo, '.github/workflows/sync-upstream.yml', legacyWorkflow);
 		write(context.repo, '.github/workflows/custom.yml', 'name: User custom workflow\non: workflow_dispatch\n');
@@ -241,6 +242,7 @@ function createSandbox({ legacy = false, remote = false, workflows = true } = {}
 	if (legacy) {
 		write(context.repo, 'scripts/merge-wrangler-config.js', readFileSync(join(fixtureRoot, 'legacy-merge-wrangler-config.js')));
 		safeRemove(context, join(context.repo, 'scripts/sync-upstream-compat.js'));
+		safeRemove(context, join(context.repo, 'scripts/merge-migrations.js'));
 	}
 	git(context, ['add', '-A']);
 	git(context, ['commit', '-m', 'Initial deployed repository']);
@@ -276,7 +278,9 @@ afterEach(() => {
 	}
 });
 
-describe.skipIf(!hasSyncWorkflow)('Sync Upstream compatibility using real Git repositories', () => {
+// Each test drives several real Git commands, which can take well over the default
+// 10 seconds on a busy Windows machine.
+describe.skipIf(!hasSyncWorkflow)('Sync Upstream compatibility using real Git repositories', { timeout: 60000 }, () => {
 	it.skipIf(!hasRsync).each([
 		['legacy workflow with compatibility repair', legacyWorkflow, true],
 		['current workflow without compatibility repair', currentWorkflow, false],
@@ -342,6 +346,7 @@ describe.skipIf(!hasSyncWorkflow)('Sync Upstream compatibility using real Git re
 		const oldUpstream = new Map(context.upstream);
 		oldUpstream.set('scripts/merge-wrangler-config.js', readFileSync(join(fixtureRoot, 'legacy-merge-wrangler-config.js')));
 		oldUpstream.delete('scripts/sync-upstream-compat.js');
+		oldUpstream.delete('scripts/merge-migrations.js');
 		syncFiles(context, oldUpstream);
 		merge(context);
 		const result = commitStep(context, legacyWorkflow, true);
@@ -401,7 +406,7 @@ describe.skipIf(!hasSyncWorkflow)('Sync Upstream compatibility using real Git re
 		expect(git(context, ['show', 'origin/main:new-empty.txt']).stdout).toBe('');
 		expect(git(context, ['cat-file', '-e', 'origin/main:obsolete.txt'], true).status).not.toBe(0);
 		expect(git(context, ['diff', context.initialHead, 'origin/main', '--', '.github/workflows']).stdout).toBe('');
-	}, 20000);
+	});
 
 	it.each([
 		['a regular new file', 'src/新 feature.js', 'export const added = true;\n'],

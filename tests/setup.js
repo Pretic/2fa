@@ -3,6 +3,7 @@
  * 为 Node.js 环境提供 Web Crypto API polyfill
  */
 
+import { afterEach, expect } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { TextEncoder, TextDecoder } from 'node:util';
 
@@ -55,3 +56,15 @@ if (typeof globalThis.performance === 'undefined' || typeof globalThis.performan
 
 console.log('✅ Vitest setup complete - Web Crypto API ready');
 
+
+// Unit/integration tests must explicitly mock fetch. Never transmit fixture
+// credentials or synthetic OTP seeds to external services.
+const unmockedRequests = [];
+globalThis.fetch = async () => {
+  unmockedRequests.push('Unmocked fetch');
+  throw new Error('Network disabled in tests: mock fetch explicitly');
+};
+afterEach(() => {
+  const attempts = unmockedRequests.splice(0);
+  expect(attempts, 'Every network call must be mocked').toEqual([]);
+});

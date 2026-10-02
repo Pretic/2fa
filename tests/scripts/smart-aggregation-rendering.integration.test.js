@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { getCoreCode } from '../../src/ui/scripts/core.js';
+import { getI18nCode } from '../../src/ui/scripts/i18n.js';
 import { getSearchCode } from '../../src/ui/scripts/search.js';
 import { getServiceAggregationCode } from '../../src/ui/scripts/serviceAggregation.js';
 import { getStateCode } from '../../src/ui/scripts/state.js';
@@ -422,8 +423,7 @@ function createHarness(initialStorage = {}, overrides = {}) {
 	const page = createPageDocument();
 	const localStorage = createStorage(initialStorage);
 	const updateOTP = overrides.updateOTP ?? vi.fn(async () => {});
-	const updateOTPSecretsInBatch =
-		overrides.updateOTPSecretsInBatch ?? vi.fn(async () => {});
+	const updateOTPSecretsInBatch = overrides.updateOTPSecretsInBatch ?? vi.fn(async () => {});
 	const startOTPInterval = overrides.startOTPInterval ?? vi.fn();
 	const window = {
 		addEventListener: vi.fn(),
@@ -431,6 +431,7 @@ function createHarness(initialStorage = {}, overrides = {}) {
 		visualViewport: null,
 	};
 	const navigator = {
+		language: 'zh-CN',
 		clipboard: {
 			writeText: vi.fn(async () => {}),
 		},
@@ -450,6 +451,7 @@ function createHarness(initialStorage = {}, overrides = {}) {
     function hideQRScanner() {}
     function hideImportModal() {}
     function showCenterToast() {}
+    ${getI18nCode()}
     ${getStateCode()}
     ${getCoreCode()}
     ${getServiceAggregationCode()}
@@ -460,7 +462,9 @@ function createHarness(initialStorage = {}, overrides = {}) {
       initSortDropdownOutsideClose,
       copyNextOTP,
       copyOTP,
+      renderSecrets,
       renderFilteredSecrets,
+      ${overrides.i18n ? 'setLanguage,' : ''}
       restoreGroupSortPreference,
       restoreSortPreference,
       restoreViewModePreference,
@@ -598,10 +602,7 @@ describe('smart aggregation rendering integration', () => {
 			resolveBatch = resolve;
 		});
 		const updateOTPSecretsInBatch = vi.fn(() => batchPromise);
-		const { api, clearInterval, startOTPInterval } = createHarness(
-			{},
-			{ updateOTPSecretsInBatch },
-		);
+		const { api, clearInterval, startOTPInterval } = createHarness({}, { updateOTPSecretsInBatch });
 		const renderedSecrets = TEST_SECRETS.slice(0, 2);
 		api.setSecrets(renderedSecrets);
 		api.setOTPIntervals({ google: 101, gmail: 102 });
@@ -664,10 +665,7 @@ describe('smart aggregation rendering integration', () => {
 
 	it('keeps family-name search working after replacing an item with the same service name', async () => {
 		const { api, document } = createHarness();
-		const editedSecrets = [
-			secret('gmail', 'Gmail', 'before@example.com'),
-			secret('youtube', 'YouTube', 'video@example.com'),
-		];
+		const editedSecrets = [secret('gmail', 'Gmail', 'before@example.com'), secret('youtube', 'YouTube', 'video@example.com')];
 
 		api.setSecrets(editedSecrets);
 		await api.filterSecrets('google');
@@ -695,6 +693,8 @@ describe('smart aggregation rendering integration', () => {
 	it('searches the displayed other-services heading', async () => {
 		const { api, document } = createHarness();
 		api.setSecrets([
+			secret('google', 'Google', 'owner@example.com'),
+			secret('gmail', 'Gmail', 'mail@example.com'),
 			secret('github', 'GitHub', 'code@example.com'),
 			secret('discord', 'Discord', 'chat@example.com'),
 		]);
@@ -703,7 +703,30 @@ describe('smart aggregation rendering integration', () => {
 
 		const list = document.getElementById('secretsList');
 		expect(list.querySelector('.service-group-title').textContent).toBe('其他服务');
+		expect(list.querySelector('.service-group-count').textContent).toBe('2 个');
 		expect(list.querySelectorAll('h3').map((node) => node.textContent)).toEqual(['GitHub', 'Discord']);
+	});
+
+	it('shows no heading when no service has two or more accounts', async () => {
+		const { api, document } = createHarness();
+		api.restoreViewModePreference();
+		api.setSecrets([secret('github', 'GitHub', 'code@example.com'), secret('discord', 'Discord', 'chat@example.com')]);
+		await api.renderFilteredSecrets();
+
+		const list = document.getElementById('secretsList');
+		expect(list.classList.contains('is-grouped')).toBe(true);
+		expect(list.querySelectorAll('.service-group-header')).toHaveLength(0);
+		expect(list.querySelectorAll('.service-group-grid')).toHaveLength(1);
+		expect(list.querySelectorAll('.secret-card')).toHaveLength(2);
+
+		// Adding a second account of a service brings the headings back.
+		api.setSecrets([
+			secret('github', 'GitHub', 'code@example.com'),
+			secret('github-work', 'GitHub', 'work@example.com'),
+			secret('discord', 'Discord', 'chat@example.com'),
+		]);
+		await api.renderFilteredSecrets();
+		expect(list.querySelectorAll('.service-group-title').map((node) => node.textContent)).toEqual(['GitHub', '其他服务']);
 	});
 
 	it('does not copy failed eight-digit OTP placeholders', async () => {
@@ -755,5 +778,56 @@ describe('smart aggregation rendering integration', () => {
 		expect(api.getOTPIntervalIds()).toEqual([]);
 		expect(clearInterval).toHaveBeenCalledTimes(TEST_SECRETS.length);
 		expect(document.getElementById('secretsList').innerHTML).toBe('');
+	});
+});
+
+describe('translated empty states', () => {
+	it('keeps an empty vault translated after loading and changing languages', async () => {
+		const { api, document } = createHarness({ language: 'en' }, { i18n: true });
+		api.setSecrets([]);
+		await api.renderSecrets();
+
+		const emptyState = document.getElementById('emptyState');
+		expect(emptyState.querySelector('h3').textContent).toBe('No Keys Yet');
+		expect(emptyState.querySelector('p').textContent).toBe('Add your two-factor authentication keys to generate verification codes here');
+		expect(emptyState.querySelector('button').textContent).toBe('Add Key');
+		expect(emptyState.querySelector('button').getAttribute('onclick')).toBe('showAddModal()');
+
+		api.setLanguage('zh-TW');
+		expect(emptyState.querySelector('h3').textContent).toBe('尚無金鑰');
+		expect(emptyState.querySelector('p').textContent).toBe('新增帳號的雙重驗證金鑰，在此獲取驗證碼');
+		expect(emptyState.querySelector('button').textContent).toBe('新增金鑰');
+
+		await api.renderSecrets();
+		expect(emptyState.querySelector('h3').textContent).toBe('尚無金鑰');
+		api.setLanguage('zh-CN');
+		expect(emptyState.querySelector('h3').textContent).toBe('还没有密钥');
+		expect(emptyState.querySelector('button').textContent).toBe('添加密钥');
+	});
+
+	it('translates unmatched search results and preserves the query when switching languages', async () => {
+		const { api, document } = createHarness({ language: 'en' }, { i18n: true });
+		api.setSecrets(TEST_SECRETS);
+		document.getElementById('searchInput').value = 'not-present';
+		await api.filterSecrets('not-present');
+
+		const emptyState = document.getElementById('emptyState');
+		expect(emptyState.querySelector('h3').textContent).toBe('No matching keys found');
+		expect(emptyState.querySelector('p').textContent).toBe('Try searching with different keywords');
+		expect(emptyState.querySelector('button').textContent).toBe('Clear search');
+		expect(emptyState.querySelector('button').getAttribute('onclick')).toBe('clearSearch()');
+
+		api.setLanguage('zh-TW');
+		expect(emptyState.querySelector('h3').textContent).toBe('未找到相符的金鑰');
+		expect(emptyState.querySelector('p').textContent).toBe('嘗試使用不同的關鍵字搜尋');
+		expect(emptyState.querySelector('button').textContent).toBe('清除搜尋');
+		expect(document.getElementById('searchInput').value).toBe('not-present');
+		expect(document.getElementById('secretsList').style.display).toBe('none');
+
+		document.getElementById('searchInput').value = '';
+		api.setSecrets([]);
+		await api.filterSecrets('');
+		expect(emptyState.querySelector('h3').textContent).toBe('尚無金鑰');
+		expect(emptyState.querySelector('button').getAttribute('onclick')).toBe('showAddModal()');
 	});
 });

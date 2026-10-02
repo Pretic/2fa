@@ -3,6 +3,8 @@
  * 支持核心模块和懒加载模块分离
  */
 
+import { getI18nCode } from './i18n.js';
+import { getSharedTransferMessageLocalizerCode } from './transferMessages.js';
 import { getStateCode } from './state.js';
 import { getTimeCode } from './time.js';
 import { getAuthCode } from './auth.js';
@@ -22,25 +24,29 @@ import { getUtilsCode } from './utils.js';
 import { getPWACode } from './pwa.js';
 import { getModuleLoaderCode } from './moduleLoader.js';
 import { getVersionCheckCode } from './versionCheck.js';
+import { getBrowserExtensionCode } from './browserExtension.js';
+import { getHiddenSecretsCode } from './hiddenSecrets.js';
+
+export { getI18nCode };
 
 /**
  * 获取核心JavaScript代码（首次加载必需）
- * 包含：状态管理、时间校准、认证、OTP、UI、搜索、核心逻辑、PWA、模块加载器
+ * 包含：国际化、状态管理、时间校准、认证、OTP、UI、搜索、核心逻辑、PWA、模块加载器
  * @returns {string} 核心JavaScript代码
  */
 export function getCoreScripts() {
-	return `${getUtilsCode()}${getStateCode()}${getTimeCode()}${getAuthCode()}${getOTPCode()}${getUICode()}${getSearchCode()}${getSettingsCode()}${getCoreCode()}${getServiceAggregationCode()}${getPWACode()}${getModuleLoaderCode()}${getVersionCheckCode()}`;
+	return `${getI18nCode()}${getSharedTransferMessageLocalizerCode()}${getUtilsCode()}${getStateCode()}${getTimeCode()}${getAuthCode()}${getOTPCode()}${getUICode()}${getSearchCode()}${getSettingsCode()}${getBrowserExtensionCode()}${getCoreCode()}${getHiddenSecretsCode()}${getServiceAggregationCode()}${getPWACode()}${getModuleLoaderCode()}${getVersionCheckCode()}`;
 }
 
 /**
  * 获取完整的JavaScript代码（传统模式，不分割）
- * Utils必须在最前面，因为其他模块需要使用它的通用函数
+ * i18n与Utils必须在最前面，因为其他模块需要使用它们的通用函数
  * @returns {string} 完整的JavaScript代码
  */
 export function getScripts() {
 	// QRCode must come before GoogleMigration, GoogleMigration must come before Export
 	// because Export calls showExportToGoogleModal from GoogleMigration
-	return `${getUtilsCode()}${getStateCode()}${getTimeCode()}${getAuthCode()}${getOTPCode()}${getUICode()}${getSearchCode()}${getSettingsCode()}${getQRCodeCode()}${getGoogleMigrationCode()}${getExportCode()}${getImportCode()}${getBackupCode()}${getToolsCode()}${getCoreCode()}${getServiceAggregationCode()}${getPWACode()}${getVersionCheckCode()}`;
+	return `${getI18nCode()}${getSharedTransferMessageLocalizerCode()}${getUtilsCode()}${getStateCode()}${getTimeCode()}${getAuthCode()}${getOTPCode()}${getUICode()}${getSearchCode()}${getSettingsCode()}${getBrowserExtensionCode()}${getQRCodeCode()}${getGoogleMigrationCode()}${getExportCode()}${getImportCode()}${getBackupCode()}${getToolsCode()}${getCoreCode()}${getHiddenSecretsCode()}${getServiceAggregationCode()}${getPWACode()}${getVersionCheckCode()}`;
 }
 
 /**

@@ -51,7 +51,7 @@ async function buildRelease() {
 
     // 使用 esbuild 打包
     console.log('⚙️  正在打包模块...');
-    const result = await build({
+    await build({
       entryPoints: [join(rootDir, 'src', 'worker.js')],
       bundle: true,
       format: 'esm',
@@ -146,9 +146,11 @@ wrangler deploy worker.js
 
 ## ⚙️ 配置环境变量
 
-部署后需要配置以下环境变量：
+首次部署后需要配置以下存储和环境变量。升级已有实例时，继续使用原 Worker、\`SECRETS_KV\` 绑定和 \`ENCRYPTION_KEY\`，无需创建新库或迁移数据。
 
 ### 1. 创建 KV Namespace
+
+仅首次部署且尚无账户库时创建；已有实例直接复用原 KV。
 
 \`\`\`bash
 wrangler kv namespace create SECRETS_KV
@@ -162,7 +164,13 @@ wrangler kv namespace create SECRETS_KV
 
 在 Worker 设置中绑定 KV：
 - Variable name: \`SECRETS_KV\`
-- KV namespace: 选择刚创建的 namespace
+- KV namespace: 首次部署选择刚创建的 namespace；升级时保留原 namespace
+
+### 2.5 同时修改的保护（Durable Object）
+
+仓库中的 \`wrangler.toml\` 还声明了 Durable Object \`SECRETS_STORE\`：读写密钥的请求都交给它依次处理，避免多台设备同时修改时互相覆盖。一键部署、Workers Builds 和 \`npm run deploy\` 会自动创建它。
+
+直接粘贴 \`worker.js\` 或不带配置执行 \`wrangler deploy worker.js\` 时不会创建这个绑定。应用照常可用，但只有同一个实例收到的请求会依次处理，多台设备同时修改时仍可能丢失其中一次修改。
 
 ### 3. 配置密钥（推荐）
 
