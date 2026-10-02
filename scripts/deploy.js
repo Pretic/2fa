@@ -81,7 +81,12 @@ try {
 					{ encoding: 'utf-8', cwd: projectRoot, stdio: ['pipe', 'pipe', 'pipe'] },
 				),
 			),
-		{ workerNameOverride },
+		{
+			workerNameOverride,
+			// Verified production binding: Worker 2fa -> KV namespace titled exactly 2fa.
+			// Named development environments must never select this production vault.
+			...(!envName ? { requiredWorkerName: '2fa', requiredExistingNamespaceTitle: '2fa' } : { forbiddenWorkerName: '2fa' }),
+		},
 	);
 	if (binding.kind === 'configured') {
 		console.log('   ✅ 保留配置中明确指定的 SECRETS_KV');

@@ -74,7 +74,7 @@ async function invoke(
 	config,
 	{
 		envName = null,
-		namespaces = [],
+		namespaces = [{ title: '2fa', id: 'explicit-vault' }],
 		failDeployment = false,
 		failTemporaryWrite = false,
 		args = null,
@@ -116,7 +116,7 @@ function expectOriginalUntouched(original) {
 	expect([...fixtures.files.keys()]).toEqual([wranglerPath]);
 }
 
-const base = `name = "vault"
+const base = `name = "2fa"
 main = "src/worker.js"
 [[kv_namespaces]]
 binding = "SECRETS_KV"
@@ -153,7 +153,7 @@ describe('deployment command storage isolation', () => {
 	it.each([false, true])('deploys from a temporary copy and never writes wrangler.toml (failure=%s)', async (failure) => {
 		const original = '# retain comments and original formatting\r\n' + base.replaceAll('\n', '\r\n');
 		const exit = await invoke(original, { failDeployment: failure });
-		expect(fixtures.commands.some(({ args }) => args[1] === 'kv')).toBe(false);
+		expect(fixtures.commands.some(({ args }) => args[1] === 'kv')).toBe(true);
 		const deploy = deployCommand();
 		expect(parse(deploy.config).kv_namespaces[0].id).toBe('explicit-vault');
 		expect(parse(deploy.config).vars.SW_VERSION).toBe('test-version');
@@ -204,27 +204,44 @@ describe('deployment command storage isolation', () => {
 		expectOriginalUntouched(original);
 	});
 
-	it('finds storage by the connected Worker name that Workers Builds deploys to', async () => {
-		const original = base.replace('id = "explicit-vault"\n', '');
-		const namespaces = [{ title: 'vault-secrets-kv', id: 'other-instance-vault' }];
-		await invoke(original, { namespaces, workerNameOverride: 'my-vault' });
-		expect(process.env.WRANGLER_CI_OVERRIDE_NAME).toBe('my-vault');
-		// The configured name matches another deployment's namespace; it must not be bound.
-		expect(parse(deployCommand().config).kv_namespaces[0].id).toBeUndefined();
-		expectOriginalUntouched(original);
-
-		await invoke(original, {
-			namespaces: [...namespaces, { title: 'my-vault-secrets-kv', id: 'own-vault' }],
-			workerNameOverride: 'my-vault',
-		});
-		expect(parse(deployCommand().config).kv_namespaces[0].id).toBe('own-vault');
+	it('never deploys a named development environment onto the production Worker', async () => {
+		const original =
+			base + '\n[env.development]\nname="2fa-dev"\n[[env.development.kv_namespaces]]\nbinding="SECRETS_KV"\nid="dev-vault"\n';
+		const exit = await invoke(original, { envName: 'development', workerNameOverride: '2fa' });
+		expect(exit).toHaveBeenCalledWith(1);
+		expect(deployCommand()).toBeUndefined();
+		expect(fixtures.writes).toEqual([]);
 	});
 
-	it('keeps using the configured name outside Workers Builds', async () => {
+	it('refuses a different connected Worker even if a generated namespace exists', async () => {
 		const original = base.replace('id = "explicit-vault"\n', '');
-		await invoke(original, { namespaces: [{ title: 'vault-secrets-kv', id: 'local-vault' }] });
-		expect('WRANGLER_CI_OVERRIDE_NAME' in process.env).toBe(false);
-		expect(parse(deployCommand().config).kv_namespaces[0].id).toBe('local-vault');
+		const exit = await invoke(original, {
+			namespaces: [{ title: 'my-vault-secrets-kv', id: 'other-vault' }],
+			workerNameOverride: 'my-vault',
+		});
+		expect(exit).toHaveBeenCalledWith(1);
+		expect(deployCommand()).toBeUndefined();
+		expect(fixtures.writes).toEqual([]);
+	});
+
+	it('binds the verified production title rather than a generated namespace', async () => {
+		const original = base.replace('id = "explicit-vault"\n', '');
+		await invoke(original, {
+			namespaces: [
+				{ title: '2fa', id: 'verified-vault' },
+				{ title: '2fa-secrets-kv', id: 'wrong-vault' },
+			],
+		});
+		expect(parse(deployCommand().config).kv_namespaces[0].id).toBe('verified-vault');
+		expectOriginalUntouched(original);
+	});
+
+	it('fails closed instead of creating a vault when the verified title is absent', async () => {
+		const original = base.replace('id = "explicit-vault"\n', '');
+		const exit = await invoke(original, { namespaces: [{ title: '2fa-secrets-kv', id: 'wrong-vault' }] });
+		expect(exit).toHaveBeenCalledWith(1);
+		expect(deployCommand()).toBeUndefined();
+		expect(fixtures.writes).toEqual([]);
 	});
 
 	it('stops before deploying when the connected Worker name is blank', async () => {
@@ -240,8 +257,8 @@ describe('deployment command storage isolation', () => {
 		const original = base.replace('id = "explicit-vault"\n', '');
 		await invoke(original, {
 			namespaces: [
-				{ title: 'vault-secrets-kv', id: 'a' },
-				{ title: 'vault-SECRETS_KV', id: 'b' },
+				{ title: '2fa', id: 'a' },
+				{ title: '2fa', id: 'b' },
 			],
 		});
 		expect(deployCommand()).toBeUndefined();

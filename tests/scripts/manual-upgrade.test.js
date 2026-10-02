@@ -14,6 +14,7 @@ describe('Manual-only customized upstream integration', () => {
 	it('preserves browser serialization and both Durable Object bindings', () => {
 		const config = parse(read('wrangler.toml'));
 		expect(config.keep_names).toBe(false);
+		expect(config.keep_vars).toBe(true);
 		for (const env of [config, config.env.development]) {
 			expect(env.kv_namespaces).toEqual(expect.arrayContaining([expect.objectContaining({ binding: 'SECRETS_KV' })]));
 			expect(env.durable_objects.bindings).toContainEqual({ name: 'SECRETS_STORE', class_name: 'SecretsStore' });

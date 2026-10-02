@@ -3,14 +3,18 @@ main = "src/worker.js"
 compatibility_date = "2024-01-13"
 workers_dev = true
 
+# Preserve dashboard-managed plaintext variables; declared vars still override them.
+# Cloudflare Secrets (including ENCRYPTION_KEY) are preserved separately.
+keep_vars = true
+
 # The public page serializes self-contained functions into its browser script.
 # keep_names injects Worker-only __name helpers that cannot run in that script.
 keep_names = false
 
 # KV 命名空间
 # 始终声明 SECRETS_KV，避免 Git 自动构建部署时丢失绑定。
-# 新版 Wrangler 会在首次部署时自动创建或保持已链接的 KV 资源。
-# 如需固定到指定资源，可在本地补充 id / preview_id。
+# 生产 npm run deploy 必须找到已核实的唯一 namespace（名称精确为 2fa）。
+# 解析出的 ID 仅写入临时部署配置；缺失或歧义时停止，不创建空库。
 [[kv_namespaces]]
 binding = "SECRETS_KV"
 

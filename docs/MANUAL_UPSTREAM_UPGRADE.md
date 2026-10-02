@@ -23,11 +23,19 @@
 ## 部署前必须人工确认（本 PR 不执行部署）
 
 1. 导出并离线验证当前完整备份，记录 Worker 名称、域名/路由、环境、原 `SECRETS_KV` namespace ID 和现有密钥配置。不要把秘密提交到仓库。
-2. 确认实际 Cloudflare 构建/部署命令。保持同一个 Worker、原 KV 和原 `ENCRYPTION_KEY`；新部署脚本的命名匹配不能证明自动找到了旧 KV。当前模板没有 KV ID，部署前应在受控配置中明确绑定旧 namespace，避免误建空库。
+2. 确认实际 Cloudflare 构建/部署命令。保持同一个 Worker、原 KV 和原 `ENCRYPTION_KEY`；新部署脚本的命名匹配不能证明自动找到了旧 KV。已根据 Cloudflare 绑定截图核实：生产 Worker 为 `2fa`，`SECRETS_KV` 指向名称精确为 `2fa` 的 namespace。生产 `npm run deploy` 只接受此 Worker 和唯一精确名称，从认证的 namespace 列表解析 ID 并写入临时配置；缺失、歧义、无权限或显式 ID 不匹配均停止，不回退到自动命名或创建空库。若 namespace 改名，需要重新核实后再更新此策略。开发环境禁止部署到生产 Worker。
 3. 保留生产及 development 的 `SECRETS_STORE` Durable Object binding、Worker 的 `SecretsStore` 导出，以及 `v1` 的 `new_sqlite_classes = ["SecretsStore"]` migration。账户数据仍在原 `SECRETS_KV`；SQLite DO 负责串行协调。
 4. 切换前后各约一分钟暂停账户新增、修改、删除、导入、恢复和 HOTP 复制/推进，等待旧 KV 写入可见。所有设备及扩展都要遵守。
 5. 经用户批准再部署；验证 `/` 生成/复制、登录 `/admin`、原账户完整性、TOTP、HOTP 单步推进、备份及退出。生产云服务与真实数据验证必须单独进行。
 6. 第一次引入 DO migration 后，Cloudflare 控制台不能直接回滚到未包含该类的旧版本。回滚需要依照上游部署文档准备显式删除类的 migration/CLI 流程；不要自动删除 DO 或修改 KV/密钥。先确认备份、写入静止和最新账户数据再决策。
+
+## 已核实的部署设置与变量保护
+
+- 生产分支 `main`，构建 `npm run build`，生产部署 `npm run deploy`；非生产分支仍使用 `npx wrangler versions upload`
+- 首次 DO migration 在非生产版本上传中报 10211 是预期限制；不要把预览命令改成对生产 Worker 的完整部署
+- `keep_vars = true` 保留控制台中未在配置声明的明文变量；已声明的 `SW_VERSION` 和 `ENVIRONMENT` 仍使用部署配置值，版本号由部署脚本生成
+- 已核实 `ENCRYPTION_KEY` 为 Cloudflare Secret。普通部署保留此 Secret，代码和部署脚本不读取、提交或更改其值
+- 用户确认已有近期 WebDAV 备份；实际切换仍需按上述步骤暂停写入并检查结果
 
 ## 后续手动升级
 

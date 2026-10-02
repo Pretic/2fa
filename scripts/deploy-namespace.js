@@ -99,7 +99,12 @@ function effectiveWorkerName(configuration, target, envName, workerNameOverride)
 // override when present, otherwise the configured name. Using the configured
 // name for a connected Worker with a different name could adopt the storage of
 // another deployment that happens to use the configured name.
-export async function resolveKvBinding(configText, envName, listNamespaces, { workerNameOverride } = {}) {
+export async function resolveKvBinding(
+	configText,
+	envName,
+	listNamespaces,
+	{ workerNameOverride, requiredWorkerName, forbiddenWorkerName, requiredExistingNamespaceTitle } = {},
+) {
 	const configuration = parse(configText);
 	const target = envName ? configuration.env?.[envName] : configuration;
 	if (!target) {
@@ -113,18 +118,31 @@ export async function resolveKvBinding(configText, envName, listNamespaces, { wo
 		throw new Error('目标环境必须且只能声明一个 SECRETS_KV 绑定');
 	}
 	const binding = bindings[0];
+	let workerName;
+	if (requiredWorkerName || forbiddenWorkerName) {
+		workerName = effectiveWorkerName(configuration, target, envName, workerNameOverride);
+		if ((requiredWorkerName && workerName !== requiredWorkerName) || (forbiddenWorkerName && workerName === forbiddenWorkerName)) {
+			throw new Error('生产 Worker 与已核实的账户库不匹配，已停止部署');
+		}
+	}
 	if (Object.hasOwn(binding, 'id')) {
 		if (typeof binding.id !== 'string' || !binding.id.trim()) {
 			throw new Error('SECRETS_KV 的 id 不能为空');
 		}
-		return { kind: 'configured', id: binding.id };
+		if (!requiredExistingNamespaceTitle) {
+			return { kind: 'configured', id: binding.id };
+		}
 	}
-	const workerName = effectiveWorkerName(configuration, target, envName, workerNameOverride);
+	workerName ??= effectiveWorkerName(configuration, target, envName, workerNameOverride);
 	let namespaces;
 	try {
 		namespaces = await listNamespaces();
 	} catch {
-		throw new Error('无法核对已有 KV，请检查 Cloudflare 登录状态或在配置中明确填写 SECRETS_KV id');
+		throw new Error(
+			requiredExistingNamespaceTitle
+				? '无法核对已有 KV，请检查 Cloudflare namespace 列表权限；生产部署必须完成核对'
+				: '无法核对已有 KV，请检查 Cloudflare 登录状态或在配置中明确填写 SECRETS_KV id',
+		);
 	}
 	if (
 		!Array.isArray(namespaces) ||
@@ -139,14 +157,29 @@ export async function resolveKvBinding(configText, envName, listNamespaces, { wo
 	) {
 		throw new Error('KV 列表响应无效，已停止部署');
 	}
-	const titles = namespaceTitles(workerName, envName);
+	// This fork's production vault title was verified in the Cloudflare binding.
+	// Never substitute a generated name or provision a new production vault.
+	const titles = requiredExistingNamespaceTitle ? new Set([requiredExistingNamespaceTitle]) : namespaceTitles(workerName, envName);
 	const matches = new Map(namespaces.filter((namespace) => titles.has(namespace.title)).map((namespace) => [namespace.id, namespace]));
 	if (matches.size > 1) {
-		throw new Error('找到多个可能的账户库，请在目标环境中明确填写 SECRETS_KV id 后再部署');
+		throw new Error(
+			requiredExistingNamespaceTitle
+				? '已核实的生产 KV 名称对应多个 ID，必须重新核实绑定后再部署'
+				: '找到多个可能的账户库，请在目标环境中明确填写 SECRETS_KV id 后再部署',
+		);
 	}
 	if (matches.size === 1) {
 		const { id, title } = matches.values().next().value;
+		if (Object.hasOwn(binding, 'id')) {
+			if (binding.id !== id) {
+				throw new Error('配置的 KV ID 与已核实的生产 namespace 不一致，已停止部署');
+			}
+			return { kind: 'configured', id };
+		}
 		return { kind: 'existing', id, title };
+	}
+	if (requiredExistingNamespaceTitle) {
+		throw new Error('未找到已核实的生产 KV namespace，已停止部署；不会创建空账户库');
 	}
 	return { kind: 'new' };
 }

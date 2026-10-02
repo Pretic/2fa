@@ -283,7 +283,55 @@ describe('reading the wrangler namespace list', () => {
 		expect(parseNamespaceList('[notice] something happened\n' + json)).toEqual(listed);
 	});
 
-	it.each(['', 'Proxy environment variables detected.', '{"id": "x"}', '[ not json'])('rejects output without a JSON list: %s', (output) => {
-		expect(() => parseNamespaceList(output)).toThrow('KV 列表响应无效');
+	it.each(['', 'Proxy environment variables detected.', '{"id": "x"}', '[ not json'])(
+		'rejects output without a JSON list: %s',
+		(output) => {
+			expect(() => parseNamespaceList(output)).toThrow('KV 列表响应无效');
+		},
+	);
+});
+
+describe('verified production vault selection', () => {
+	const config = withoutIds.replace('name = "vault-app"', 'name = "2fa"');
+	const policy = { requiredWorkerName: '2fa', requiredExistingNamespaceTitle: '2fa' };
+	it('selects only the verified exact namespace title', async () => {
+		const result = await resolveKvBinding(
+			config,
+			null,
+			async () => [namespace('2fa', 'real-vault'), namespace('2fa-SECRETS_KV', 'wrong-vault')],
+			policy,
+		);
+		expect(result).toEqual({ kind: 'existing', id: 'real-vault', title: '2fa' });
+	});
+	it.each([[], [namespace('2fa-SECRETS_KV')], [namespace('2FA')], [namespace('2fa', 'a'), namespace('2fa', 'b')], [{ title: '2fa' }]])(
+		'refuses missing, ambiguous or malformed production storage %#',
+		async (namespaces) => {
+			await expect(resolveKvBinding(config, null, async () => namespaces, policy)).rejects.toThrow();
+		},
+	);
+	it('fails closed when namespace listing is denied', async () => {
+		await expect(
+			resolveKvBinding(
+				config,
+				null,
+				async () => {
+					throw new Error('Access denied');
+				},
+				policy,
+			),
+		).rejects.toThrow('无法核对已有 KV');
+	});
+	it.each(['another-worker', ''])('refuses a wrong or empty Workers Builds target: %s', async (workerNameOverride) => {
+		const list = vi.fn();
+		await expect(resolveKvBinding(config, null, list, { ...policy, workerNameOverride })).rejects.toThrow();
+		expect(list).not.toHaveBeenCalled();
+	});
+	it('checks explicit production IDs against the verified namespace', async () => {
+		const pinned = config.replace('binding = "SECRETS_KV"', 'binding = "SECRETS_KV"\nid = "pinned-vault"');
+		await expect(resolveKvBinding(pinned, null, async () => [namespace('2fa', 'other-vault')], policy)).rejects.toThrow('KV ID');
+		expect(await resolveKvBinding(pinned, null, async () => [namespace('2fa', 'pinned-vault')], policy)).toEqual({
+			kind: 'configured',
+			id: 'pinned-vault',
+		});
 	});
 });
